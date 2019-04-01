@@ -14,13 +14,14 @@ from Orange.data import (
 __all__ = ['table_from_frame', 'table_to_frame']
 
 
-def table_from_frame(df, *, force_nominal=False):
+def table_from_frame(df, *, meta_cols=None, force_nominal=False):
     """
     Convert pandas.DataFrame to Orange.data.Table
 
     Parameters
     ----------
     df : pandas.DataFrame
+    meta_cols: list(str) of meta columns
     force_nominal : boolean
         If True, interpret ALL string columns as nominal (DiscreteVariable).
 
@@ -56,21 +57,22 @@ def table_from_frame(df, *, force_nominal=False):
     # Iter over columns
     for name, s in df.items():
         name = str(name)
-        if _is_discrete(s):
+        if _is_discrete(s) and name not in meta_cols:
             discrete = s.astype('category').cat
             attrs.append(DiscreteVariable(name, discrete.categories.astype(str).tolist()))
             X.append(discrete.codes.replace(-1, np.nan).values)
-        elif _is_datetime(s):
+        elif _is_datetime(s) and name not in meta_cols:
             tvar = TimeVariable(name)
             attrs.append(tvar)
             s = pd.to_datetime(s, infer_datetime_format=True)
             X.append(s.astype('str').replace('NaT', np.nan).map(tvar.parse).values)
-        elif is_numeric_dtype(s):
+        elif is_numeric_dtype(s) and name not in meta_cols:
             attrs.append(ContinuousVariable(name))
             X.append(s.values)
         else:
-            metas.append(StringVariable(name))
-            M.append(s.values.astype(object))
+            if not meta_cols or (meta_cols and name in meta_cols):
+                metas.append(StringVariable(name))
+                M.append(s.values.astype(object))
 
     return Table.from_numpy(Domain(attrs, None, metas),
                             np.column_stack(X) if X else np.empty((df.shape[0], 0)),
